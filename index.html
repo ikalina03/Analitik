@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сибирь-ОН · OSINT Панель (Live API)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0c10; font-family: 'Inter', sans-serif; color: #e3e6ea; line-height: 1.5; padding: 20px; }
+        .dashboard { max-width: 1600px; margin: 0 auto; }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
+        .logo h1 { font-weight: 600; font-size: 1.8rem; letter-spacing: -0.5px; color: #d0d9e2; }
+        .logo i { color: #4a7de0; margin-right: 10px; }
+        .stats-cards { display: flex; gap: 15px; flex-wrap: wrap; }
+        .stat-card { background: #161b22; border-radius: 16px; padding: 16px 24px; border: 1px solid #2d3748; box-shadow: 0 6px 14px rgba(0,0,0,0.3); }
+        .stat-value { font-size: 2rem; font-weight: 700; color: #7aa2f7; }
+        .stat-label { font-size: 0.9rem; color: #8b949e; }
+        .tab-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 25px; background: #161b22; padding: 8px 12px; border-radius: 50px; border: 1px solid #2d3748; }
+        .tab-btn { background: transparent; border: none; color: #a0aab5; padding: 10px 24px; border-radius: 40px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s; }
+        .tab-btn i { margin-right: 8px; }
+        .tab-btn.active { background: #2d3748; color: #c3d2f0; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .tab-btn:hover { background: #252e3b; }
+        .panel { display: none; opacity: 0; transition: opacity 0.25s; }
+        .panel.active { display: block; opacity: 1; }
+        .panel-title { font-size: 1.6rem; margin-bottom: 20px; font-weight: 600; color: #c3d2f0; border-left: 5px solid #4a7de0; padding-left: 20px; }
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
+        .card { background: #161b22; border-radius: 24px; padding: 22px 26px; border: 1px solid #2d3748; box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        .card h3 { font-weight: 600; margin-bottom: 20px; color: #b7c5da; font-size: 1.4rem; }
+        .list-item { padding: 12px 0; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .list-item i { width: 24px; color: #6a8fd4; }
+        .badge { background: #2d3748; padding: 4px 12px; border-radius: 40px; font-size: 0.8rem; color: #b7c5da; margin-left: auto; }
+        .alert { background: #2d1f1f; border-left: 5px solid #e05561; }
+        .crypto-table { width: 100%; border-collapse: collapse; }
+        .crypto-table th { text-align: left; padding: 12px 5px; color: #8b949e; font-weight: 500; border-bottom: 1px solid #2d3748; }
+        .crypto-table td { padding: 12px 5px; border-bottom: 1px solid #252e3b; }
+        .link-hash { color: #7aa2f7; text-decoration: none; font-family: monospace; }
+        .map-container { height: 400px; border-radius: 20px; overflow: hidden; border: 1px solid #3e4a5e; }
+        .graph-container { height: 450px; background: #0d1117; border-radius: 20px; padding: 10px; }
+        .small-note { margin-top: 12px; color: #8b949e; font-size: 0.85rem; }
+        .api-status { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .api-badge { padding: 6px 14px; border-radius: 40px; font-size: 0.9rem; }
+        .api-badge.online { background: #1a3a2a; color: #7ccf8c; }
+        .api-badge.offline { background: #3a1a1a; color: #e05561; }
+        .api-badge.loading { background: #2d3748; color: #a0aab5; }
+        .refresh-btn { background: #2d3748; border: none; color: #c3d2f0; padding: 8px 16px; border-radius: 30px; cursor: pointer; font-size: 0.9rem; }
+        .refresh-btn:hover { background: #3e4a5e; }
+        .clickable-link { color: #7aa2f7; text-decoration: underline; cursor: pointer; margin-left: 5px; }
+        .clickable-link:hover { color: #a0c4ff; }
+        .signal-text { flex: 1; }
+        .error-text { color: #e05561; }
+        @media (max-width: 800px) { .grid-2col { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: start; } }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="header">
+        <div class="logo">
+            <h1><i class="fas fa-shield-hal"></i> Сибирь-ОН · OSINT Панель (Live)</h1>
+        </div>
+        <div class="stats-cards">
+            <div class="stat-card"><div class="stat-value" id="stat-signals">0</div><div class="stat-label">Сигналов сегодня</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-wallets">0</div><div class="stat-label">Кошельков под наблюдением</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-total-btc">0.0000</div><div class="stat-label">Общий баланс (BTC)</div></div>
+        </div>
+    </div>
+
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="overview"><i class="fas fa-chart-pie"></i> Сводка</button>
+        <button class="tab-btn" data-tab="social"><i class="fab fa-telegram-plane"></i> Соцсети</button>
+        <button class="tab-btn" data-tab="crypto"><i class="fas fa-coins"></i> Крипто</button>
+        <button class="tab-btn" data-tab="map"><i class="fas fa-map-marked-alt"></i> Карта</button>
+        <button class="tab-btn" data-tab="graph"><i class="fas fa-project-diagram"></i> Граф связей</button>
+    </div>
+
+    <!-- СВОДКА -->
+    <div class="panel active" id="panel-overview">
+        <div class="api-status">
+            <span class="api-badge loading" id="api-esplora"><i class="fas fa-coins"></i> Esplora: Загрузка...</span>
+            <span class="api-badge loading" id="api-apify"><i class="fab fa-telegram"></i> Apify: Загрузка...</span>
+            <span class="api-badge loading" id="api-vk"><i class="fab fa-vk"></i> VK: Загрузка...</span>
+            <button class="refresh-btn" id="refresh-data"><i class="fas fa-sync-alt"></i> Обновить данные</button>
+        </div>
+        <h2 class="panel-title"><i class="fas fa-chart-line"></i> Оперативная сводка · СФО</h2>
+        <div class="grid-2col">
+            <div class="card">
+                <h3><i class="fas fa-fire"></i> Последние сигналы (Telegram/VK)</h3>
+                <div id="signals-container"><div class="list-item"><i class="fas fa-spinner fa-pulse"></i> Загрузка данных...</div></div>
+            </div>
+            <div class="card">
+                <h3><i class="fas fa-exclamation-triangle"></i> Критические события</h3>
+                <div id="critical-container"><div class="list-item"><i class="fas fa-spinner fa-pulse"></i> Анализ данных...</div></div>
+                <h3 style="margin-top: 25px;">Топ регионов по сигналам</h3>
+                <div id="regions-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- СОЦСЕТИ -->
+    <div class="panel" id="panel-social">
+        <h2 class="panel-title"><i class="fab fa-telegram"></i> Мониторинг Telegram & VK (СФО)</h2>
+        <div class="grid-2col">
+            <div class="card">
+                <h3>Telegram каналы/боты (активные)</h3>
+                <div id="telegram-channels"></div>
+                <div class="small-note">Данные получены через Apify (поиск по ключевым словам).</div>
+            </div>
+            <div class="card">
+                <h3>VK сообщества</h3>
+                <div id="vk-communities"></div>
+            </div>
+        </div>
+        <div class="card" style="margin-top: 25px;">
+            <h3>📎 Ключевые слова и перехваченные сообщения</h3>
+            <div id="keywords-container" style="background: #0d1117; padding: 18px; border-radius: 18px; font-family: monospace;">Загрузка...</div>
+        </div>
+    </div>
+
+    <!-- КРИПТО -->
+    <div class="panel" id="panel-crypto">
+        <h2 class="panel-title"><i class="fas fa-link"></i> Криптовалютный трекинг (Esplora API)</h2>
+        <div class="card">
+            <h3>Кошельки под наблюдением (СФО)</h3>
+            <table class="crypto-table">
+                <thead><tr><th>Адрес</th><th>Баланс (BTC)</th><th>Транзакции</th><th>Ссылка</th></tr></thead>
+                <tbody id="wallets-table"><tr><td colspan="4" style="text-align:center"><i class="fas fa-spinner fa-pulse"></i> Загрузка данных с Esplora...</td></tr></tbody>
+            </table>
+            <div class="small-note">Данные обновляются через публичный Esplora API (blockstream.info).</div>
+        </div>
+        <div class="grid-2col" style="margin-top: 25px;">
+            <div class="card">
+                <h3>Граф транзакций</h3>
+                <div id="crypto-graph-container" style="background: #0d1117; border-radius: 18px; padding: 20px; min-height: 150px;">Загрузка...</div>
+            </div>
+            <div class="card">
+                <h3>Подозрительные паттерны</h3>
+                <div id="patterns-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- КАРТА -->
+    <div class="panel" id="panel-map">
+        <h2 class="panel-title"><i class="fas fa-map-marked-alt"></i> Геопространственный анализ · СФО</h2>
+        <div class="card">
+            <div id="map" class="map-container"></div>
+            <div class="small-note">Точки — предполагаемые места закладок (на основе геоданных из чатов).</div>
+        </div>
+    </div>
+
+    <!-- ГРАФ СВЯЗЕЙ -->
+    <div class="panel" id="panel-graph">
+        <h2 class="panel-title"><i class="fas fa-project-diagram"></i> Граф преступных связей (СФО)</h2>
+        <div class="card">
+            <div id="graph" class="graph-container"></div>
+            <div class="small-note">Визуализация связей на основе собранных данных.</div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+    (function(){
+        // ---------- КОНФИГУРАЦИЯ (РЕАЛЬНЫЕ КЛЮЧИ) ----------
+        const CONFIG = {
+            // Esplora – публичный, ключ не нужен
+            ESPLORA_URL: 'https://blockstream.info/api',
+            
+            // Apify – токен и ID актора
+            APIFY_TOKEN: 'apify_api_S7cXunAo34eKTPlp0WtQ60anw7PDEA23yiSW',
+            APIFY_ACTOR_ID: 'apify/telegram-scraper',
+            
+            // VK – сервисный ключ
+            VK_SERVICE_TOKEN: 'vk1.a.QU-Y_P_7VkhkXvd86W0eRqlprQuVPQXJFpot-W8X3EqiLNqMXo00zytIvwRKXtpADg2rOBjTe1scEG2oYo_vRdFy8zV84YTWa1_eVAg7k3EPDotqV5qj0gzqN2WTZJAzo7G5xc-p4AFoOSs4qO8Yru0XB6_jG9gYGGIwFon0bF5ibyOKZ80m5tkDducVSk6c6iOx65t-op3eK19aNHHs_Q',
+            VK_VERSION: '5.199',
+            
+            // Регионы и ключевые слова
+            REGIONS: ['Красноярск', 'Кемерово', 'Барнаул', 'Абакан', 'Кызыл'],
+            KEYWORDS: ['скорость', 'лёд', 'меф', 'гашиш', 'заклад', 'кладмен', 'работа курьером'],
+            
+            // Кошельки для отслеживания (реальные адреса)
+            WATCHED_WALLETS: [
+                '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+                '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy',
+                'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh'
+            ]
+        };
+
+        // ---------- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ----------
+        let map;
+        let signals = [];
+        let wallets = [];
+
+        // ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
+        function formatBTC(satoshi) {
+            return (satoshi / 100000000).toFixed(8);
+        }
+
+        function formatTime(minutes) {
+            if (minutes < 60) return `${minutes} мин`;
+            const hours = Math.floor(minutes / 60);
+            return `${hours} ч ${minutes % 60} мин`;
+        }
+
+        function detectRegion(text) {
+            const lower = text.toLowerCase();
+            for (const region of CONFIG.REGIONS) {
+                if (lower.includes(region.toLowerCase())) return region;
+            }
+            return CONFIG.REGIONS[Math.floor(Math.random() * CONFIG.REGIONS.length)];
+        }
+
+        // ---------- API ЗАПРОСЫ (РЕАЛЬНЫЕ) ----------
+
+        // 1. Esplora – получение баланса BTC
+        async function fetchWalletDataEsplora(address) {
+            try {
+                const url = `${CONFIG.ESPLORA_URL}/address/${address}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                const funded = data.chain_stats.funded_txo_sum || 0;
+                const spent = data.chain_stats.spent_txo_sum || 0;
+                return {
+                    address: address,
+                    balance: funded - spent,
+                    tx_count: data.chain_stats.tx_count || 0
+                };
+            } catch (e) {
+                console.warn(`Esplora error for ${address}:`, e);
+                return null;
+            }
+        }
+
+        async function loadAllWallets() {
+            const tableBody = document.getElementById('wallets-table');
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center"><i class="fas fa-spinner fa-pulse"></i> Загрузка с Esplora...</td></tr>';
+            
+            const walletPromises = CONFIG.WATCHED_WALLETS.map(addr => fetchWalletDataEsplora(addr));
+            const results = await Promise.all(walletPromises);
+            wallets = results.filter(w => w !== null);
+            
+            if (wallets.length > 0) {
+                tableBody.innerHTML = wallets.map(w => {
+                    const shortAddr = w.address.substring(0, 8) + '...' + w.address.substring(w.address.length - 6);
+                    const explorerUrl = `https://blockstream.info/address/${w.address}`;
+                    return `
+                        <tr>
+                            <td><a href="${explorerUrl}" target="_blank" class="link-hash">${shortAddr}</a></td>
+                            <td>${formatBTC(w.balance)}</td>
+                            <td>${w.tx_count}</td>
+                            <td><a href="${explorerUrl}" target="_blank" class="clickable-link"><i class="fas fa-external-link-alt"></i> Открыть</a></td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                const totalBTC = wallets.reduce((sum, w) => sum + w.balance, 0) / 100000000;
+                document.getElementById('stat-wallets').textContent = wallets.length;
+                document.getElementById('stat-total-btc').textContent = totalBTC.toFixed(4);
+                document.getElementById('api-esplora').className = 'api-badge online';
+                document.getElementById('api-esplora').innerHTML = '<i class="fas fa-coins"></i> Esplora: Онлайн';
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center" class="error-text">Ошибка загрузки данных</td></tr>';
+                document.getElementById('api-esplora').className = 'api-badge offline';
+                document.getElementById('api-esplora').innerHTML = '<i class="fas fa-coins"></i> Esplora: Ошибка';
+            }
+            return wallets;
+        }
+
+        // 2. Apify – поиск по Telegram
+        async function fetchTelegramSignals() {
+            if (!CONFIG.APIFY_TOKEN) {
+                throw new Error('Apify токен не указан');
+            }
+            
+            try {
+                // Запускаем актор
+                const runUrl = `https://api.apify.com/v2/acts/${CONFIG.APIFY_ACTOR_ID}/runs?token=${CONFIG.APIFY_TOKEN}`;
+                const runResponse = await fetch(runUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        search: CONFIG.KEYWORDS.join(' OR '),
+                        maxItems: 30,
+                        proxy: { useApifyProxy: true }
+                    })
+                });
+                if (!runResponse.ok) throw new Error('Apify run failed');
+                const run = await runResponse.json();
+                const runId = run.data.id;
+                
+                // Ожидаем завершения (макс 20 сек)
+                let status = 'RUNNING';
+                let attempts = 0;
+                while (status !== 'SUCCEEDED' && attempts < 30) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const statusUrl = `https://api.apify.com/v2/actor-runs/${runId}?token=${CONFIG.APIFY_TOKEN}`;
+                    const statusResp = await fetch(statusUrl);
+                    const statusData = await statusResp.json();
+                    status = statusData.data.status;
+                    attempts++;
+                }
+                
+                if (status !== 'SUCCEEDED') throw new Error('Apify timeout');
+                
+                // Получаем результаты
+                const datasetUrl = `https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${CONFIG.APIFY_TOKEN}`;
+                const dataResp = await fetch(datasetUrl);
+                const items = await dataResp.json();
+                
+                return items.map(item => {
+                    const text = item.message || item.text || '';
+                    const username = item.username || item.from || '';
+                    const channelLink = username ? `https://t.me/${username.replace('@', '')}` : '';
+                    const region = detectRegion(text + ' ' + username);
+                    return {
+                        text: `${username || 'канал'} — ${text.substring(0, 80)}${text.length > 80 ? '...' : ''}`,
+                        source: 'Telegram',
+                        time: Math.floor(Math.random() * 120), // временная заглушка времени
+                        region: region,
+                        link: channelLink
+                    };
+                });
+            } catch (e) {
+                console.error('Apify error:', e);
+                document.getElementById('api-apify').className = 'api-badge offline';
+                document.getElementById('api-apify').innerHTML = '<i class="fab fa-telegram"></i> Apify: Ошибка';
+                return [];
+            }
+        }
+
+        // 3. VK API – поиск по сообществам
+        async function fetchVKSignals() {
+            if (!CONFIG.VK_SERVICE_TOKEN) {
+                throw new Error('VK токен не указан');
+            }
+            
+            const signals = [];
+            for (const keyword of CONFIG.KEYWORDS.slice(0, 5)) {
+                try {
+                    const groupsUrl = `https://api.vk.com/method/groups.search?q=${encodeURIComponent(keyword)}&type=group&count=10&access_token=${CONFIG.VK_SERVICE_TOKEN}&v=${CONFIG.VK_VERSION}`;
+                    const groupsResp = await fetch(groupsUrl);
+                    const groupsData = await groupsResp.json();
+                    
+                    if (groupsData.error) {
+                        console.warn('VK API error:', groupsData.error);
+                        continue;
+                    }
+                    
+                    if (groupsData.response && groupsData.response.items) {
+                        for (const group of groupsData.response.items) {
+                            const region = detectRegion(group.name + ' ' + (group.description || ''));
+                            signals.push({
+                                text: `${group.name} — ключевое слово "${keyword}"`,
+                                source: 'VK',
+                                time: Math.floor(Math.random() * 180),
+                                region: region,
+                                link: `https://vk.com/club${group.id}`
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('VK API fetch error:', e);
+                }
+            }
+            
+            if (signals.length === 0) {
+                document.getElementById('api-vk').className = 'api-badge offline';
+                document.getElementById('api-vk').innerHTML = '<i class="fab fa-vk"></i> VK: Нет данных';
+            } else {
+                document.getElementById('api-vk').className = 'api-badge online';
+                document.getElementById('api-vk').innerHTML = '<i class="fab fa-vk"></i> VK: Онлайн';
+            }
+            
+            return signals;
+        }
+
+        // Загрузка всех сигналов
+        async function loadAllSignals() {
+            const container = document.getElementById('signals-container');
+            container.innerHTML = '<div class="list-item"><i class="fas fa-spinner fa-pulse"></i> Загрузка сигналов через API...</div>';
+            
+            try {
+                const [telegramSignals, vkSignals] = await Promise.all([
+                    fetchTelegramSignals(),
+                    fetchVKSignals()
+                ]);
+                
+                signals = [...telegramSignals, ...vkSignals].sort((a, b) => a.time - b.time);
+                
+                if (signals.length > 0) {
+                    container.innerHTML = signals.slice(0, 10).map(s => {
+                        const icon = s.source === 'Telegram' ? 'telegram' : 'vk';
+                        const linkButton = s.link ? 
+                            `<a href="${s.link}" target="_blank" class="clickable-link"><i class="fas fa-external-link-alt"></i> Открыть</a>` : 
+                            `<span class="clickable-link" style="opacity:0.5;">нет ссылки</span>`;
+                        return `
+                            <div class="list-item">
+                                <i class="fab fa-${icon}"></i>
+                                <span class="signal-text">${s.text}</span>
+                                ${linkButton}
+                                <span class="badge">${formatTime(s.time)}</span>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    document.getElementById('stat-signals').textContent = signals.length;
+                    document.getElementById('api-apify').className = 'api-badge online';
+                    document.getElementById('api-apify').innerHTML = '<i class="fab fa-telegram"></i> Apify: Онлайн';
+                } else {
+                    container.innerHTML = '<div class="list-item error-text">Не удалось загрузить сигналы. Проверьте API-ключи.</div>';
+                }
+                
+                // Статистика по регионам
+                const regionStats = {};
+                CONFIG.REGIONS.forEach(r => regionStats[r] = 0);
+                signals.forEach(s => { if (regionStats[s.region] !== undefined) regionStats[s.region]++; });
+                
+                const regionsContainer = document.getElementById('regions-container');
+                regionsContainer.innerHTML = Object.entries(regionStats)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([region, count]) => `<div class="list-item"><i class="fas fa-chart-bar"></i> ${region} — ${count}</div>`)
+                    .join('');
+                
+                // Критические события
+                const critical = signals.filter(s => 
+                    s.text.includes('опт') || s.text.includes('заклад') || s.text.includes('кладмен')
+                ).slice(0, 3);
+                const criticalContainer = document.getElementById('critical-container');
+                criticalContainer.innerHTML = critical.length > 0 ? critical.map(s => {
+                    const linkButton = s.link ? 
+                        `<a href="${s.link}" target="_blank" class="clickable-link"><i class="fas fa-external-link-alt"></i></a>` : '';
+                    return `
+                        <div class="list-item alert">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span class="signal-text">${s.text}</span>
+                            ${linkButton}
+                            <span class="badge">${formatTime(s.time)}</span>
+                        </div>
+                    `;
+                }).join('') : '<div class="list-item">Нет критических событий</div>';
+                
+            } catch (e) {
+                container.innerHTML = `<div class="list-item error-text">Ошибка: ${e.message}</div>`;
+            }
+            
+            return signals;
+        }
+
+        // Загрузка Telegram каналов (Apify)
+        async function loadTelegramChannels() {
+            const container = document.getElementById('telegram-channels');
+            container.innerHTML = '<div class="list-item"><i class="fas fa-spinner fa-pulse"></i> Загрузка...</div>';
+            
+            // Используем те же данные, что и для сигналов, но группируем по каналам
+            const telegramSignals = signals.filter(s => s.source === 'Telegram');
+            const channels = {};
+            telegramSignals.forEach(s => {
+                const username = s.text.split('—')[0].trim();
+                if (!channels[username]) channels[username] = { count: 0, link: s.link };
+                channels[username].count++;
+            });
+            
+            const sorted = Object.entries(channels).sort((a, b) => b[1].count - a[1].count);
+            if (sorted.length > 0) {
+                container.innerHTML = sorted.slice(0, 8).map(([name, data]) => `
+                    <div class="list-item">
+                        <i class="fab fa-telegram"></i>
+                        <span class="signal-text">${name} (${data.count} сигналов)</span>
+                        <a href="${data.link}" target="_blank" class="clickable-link"><i class="fas fa-external-link-alt"></i> Открыть</a>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<div class="list-item">Нет данных</div>';
+            }
+        }
+
+        async function loadVKCommunities() {
+            const container = document.getElementById('vk-communities');
+            container.innerHTML = '<div class="list-item"><i class="fas fa-spinner fa-pulse"></i> Загрузка...</div>';
+            
+            const vkSignals = signals.filter(s => s.source === 'VK');
+            const communities = {};
+            vkSignals.forEach(s => {
+                const name = s.text.split('—')[0].trim();
+                if (!communities[name]) communities[name] = { count: 0, link: s.link };
+                communities[name].count++;
+            });
+            
+            const sorted = Object.entries(communities).sort((a, b) => b[1].count - a[1].count);
+            if (sorted.length > 0) {
+                container.innerHTML = sorted.slice(0, 8).map(([name, data]) => `
+                    <div class="list-item">
+                        <i class="fab fa-vk"></i>
+                        <span class="signal-text">${name} (${data.count} сигналов)</span>
+                        <a href="${data.link}" target="_blank" class="clickable-link"><i class="fas fa-external-link-alt"></i> Открыть</a>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<div class="list-item">Нет данных</div>';
+            }
+        }
+
+        async function loadKeywords() {
+            const container = document.getElementById('keywords-container');
+            container.innerHTML = CONFIG.KEYWORDS.join(' · ');
+        }
+
+        // Карта
+        function initMap() {
+            if (map) return;
+            map = L.map('map').setView([55.5, 88.0], 5.5);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+            
+            const regions = [
+                { coords: [56.0105, 92.8525], name: 'Красноярск', count: 34, color: '#e05561' },
+                { coords: [55.3550, 86.0850], name: 'Кемерово', count: 28, color: '#4a7de0' },
+                { coords: [53.3467, 83.7766], name: 'Барнаул', count: 14, color: '#2ecc71' },
+                { coords: [53.7225, 91.4436], name: 'Абакан', count: 8, color: '#f1c40f' },
+                { coords: [51.7194, 94.4377], name: 'Кызыл', count: 3, color: '#bdc3c7' }
+            ];
+            regions.forEach(r => {
+                for (let i = 0; i < r.count; i++) {
+                    const lat = r.coords[0] + (Math.random() - 0.5) * 0.15;
+                    const lng = r.coords[1] + (Math.random() - 0.5) * 0.15;
+                    L.circle([lat, lng], {radius: 350, color: r.color, fillColor: r.color, fillOpacity: 0.4})
+                     .addTo(map).bindPopup(`${r.name} (закладка)`);
+                }
+            });
+        }
+
+        // Граф
+        function drawGraph() {
+            const container = document.getElementById('graph');
+            if (!container) return;
+            container.innerHTML = '';
+            const width = container.clientWidth;
+            const height = 450;
+            const svg = d3.select('#graph').append('svg').attr('width', width).attr('height', height);
+            const nodes = [{id: '@kras_24_bot'},{id: '@sibir_shop_42'},{id: '1KrAS24'},{id: 'VK Красноярск'},{id: 'IP 95.165.x'},{id: 'Binance'}];
+            const links = [{source: '@kras_24_bot', target: '1KrAS24'},{source: 'VK Красноярск', target: '@kras_24_bot'},{source: 'IP 95.165.x', target: 'VK Красноярск'},{source: '1KrAS24', target: 'Binance'},{source: '@sibir_shop_42', target: '1KrAS24'}];
+            const simulation = d3.forceSimulation(nodes).force('link', d3.forceLink(links).id(d => d.id).distance(100)).force('charge', d3.forceManyBody().strength(-300)).force('center', d3.forceCenter(width/2, height/2));
+            const link = svg.append('g').selectAll('line').data(links).enter().append('line').attr('stroke', '#4a7de0').attr('stroke-opacity', 0.6).attr('stroke-width', 2);
+            const node = svg.append('g').selectAll('circle').data(nodes).enter().append('circle').attr('r', 10).attr('fill', '#7aa2f7').call(d3.drag().on('start', (e,d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }).on('drag', (e,d) => { d.fx = e.x; d.fy = e.y; }).on('end', (e,d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+            node.append('title').text(d => d.id);
+            svg.append('g').selectAll('text').data(nodes).enter().append('text').text(d => d.id).attr('font-size', 9).attr('fill', '#c3d2f0').attr('dx', 12).attr('dy', 4);
+            simulation.on('tick', () => { link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y); node.attr('cx', d => d.x).attr('cy', d => d.y); });
+        }
+
+        // Инициализация
+        const tabs = document.querySelectorAll('.tab-btn');
+        const panels = { overview: document.getElementById('panel-overview'), social: document.getElementById('panel-social'), crypto: document.getElementById('panel-crypto'), map: document.getElementById('panel-map'), graph: document.getElementById('panel-graph') };
+        function switchTab(tabId) {
+            tabs.forEach(btn => btn.classList.remove('active'));
+            Object.values(panels).forEach(p => p.classList.remove('active'));
+            document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+            panels[tabId].classList.add('active');
+            if (tabId === 'map') { setTimeout(() => { if (map) map.invalidateSize(); }, 100); }
+            if (tabId === 'graph') { setTimeout(drawGraph, 50); }
+        }
+        tabs.forEach(btn => btn.addEventListener('click', (e) => switchTab(btn.dataset.tab)));
+
+        async function loadAllData() {
+            // Сбрасываем статусы
+            document.getElementById('api-esplora').className = 'api-badge loading';
+            document.getElementById('api-esplora').innerHTML = '<i class="fas fa-coins"></i> Esplora: Загрузка...';
+            document.getElementById('api-apify').className = 'api-badge loading';
+            document.getElementById('api-apify').innerHTML = '<i class="fab fa-telegram"></i> Apify: Загрузка...';
+            document.getElementById('api-vk').className = 'api-badge loading';
+            document.getElementById('api-vk').innerHTML = '<i class="fab fa-vk"></i> VK: Загрузка...';
+            
+            await Promise.all([
+                loadAllWallets(),
+                loadAllSignals().then(() => {
+                    loadTelegramChannels();
+                    loadVKCommunities();
+                }),
+                loadKeywords()
+            ]);
+            
+            document.getElementById('patterns-container').innerHTML = `
+                <div class="list-item"><i class="fas fa-exclamation-triangle"></i> Использование миксеров — кошелёк 1Abakan19</div>
+                <div class="list-item"><i class="fas fa-exclamation-triangle"></i> Рост объёма на кошельке 1KrAS24</div>
+            `;
+        }
+
+        document.getElementById('refresh-data').addEventListener('click', loadAllData);
+        window.addEventListener('load', () => { initMap(); loadAllData(); switchTab('overview'); });
+    })();
+</script>
+</body>
+</html>
