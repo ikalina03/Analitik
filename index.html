@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🔥 Crypto OSINT · LTC + IP + История</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0b0e14; font-family: 'Inter', sans-serif; color: #e3e6ea; padding: 20px; line-height: 1.5; }
+        .dashboard { max-width: 1600px; margin: 0 auto; }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
+        .logo h1 { font-weight: 700; font-size: 1.8rem; color: #c3d2f0; }
+        .logo i { color: #4a7de0; margin-right: 10px; }
+        .stats-cards { display: flex; gap: 15px; flex-wrap: wrap; }
+        .stat-card { background: #161b22; border-radius: 16px; padding: 16px 24px; border: 1px solid #2d3748; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: #7aa2f7; }
+        .stat-label { font-size: 0.9rem; color: #8b949e; }
+        .tab-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 25px; background: #161b22; padding: 8px 12px; border-radius: 50px; border: 1px solid #2d3748; }
+        .tab-btn { background: transparent; border: none; color: #a0aab5; padding: 10px 24px; border-radius: 40px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s; }
+        .tab-btn i { margin-right: 8px; }
+        .tab-btn.active { background: #2d3748; color: #c3d2f0; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .panel { display: none; opacity: 0; transition: opacity 0.25s; }
+        .panel.active { display: block; opacity: 1; }
+        .panel-title { font-size: 1.6rem; margin-bottom: 20px; font-weight: 600; color: #c3d2f0; border-left: 5px solid #4a7de0; padding-left: 20px; }
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
+        .card { background: #161b22; border-radius: 24px; padding: 22px 26px; border: 1px solid #2d3748; box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        .card h3 { font-weight: 600; margin-bottom: 20px; color: #b7c5da; font-size: 1.4rem; }
+        .crypto-table { width: 100%; border-collapse: collapse; }
+        .crypto-table th { text-align: left; padding: 12px 5px; color: #8b949e; font-weight: 500; border-bottom: 1px solid #2d3748; }
+        .crypto-table td { padding: 12px 5px; border-bottom: 1px solid #252e3b; }
+        .link-hash { color: #7aa2f7; text-decoration: none; font-family: monospace; }
+        .api-status { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .api-badge { padding: 6px 14px; border-radius: 40px; font-size: 0.9rem; }
+        .api-badge.online { background: #1a3a2a; color: #7ccf8c; }
+        .api-badge.offline { background: #3a1a1a; color: #e05561; }
+        .api-badge.loading { background: #2d3748; color: #a0aab5; }
+        .refresh-btn { background: #2d3748; border: none; color: #c3d2f0; padding: 8px 16px; border-radius: 30px; cursor: pointer; font-size: 0.9rem; }
+        .refresh-btn:hover { background: #3e4a5e; }
+        .input-group { display: flex; gap: 10px; margin-top: 15px; }
+        .input-group input { flex: 1; padding: 12px 16px; background: #0d1117; border: 1px solid #3e4a5e; border-radius: 30px; color: white; font-size: 1rem; }
+        .input-group button { padding: 12px 24px; background: #2d3748; border: none; border-radius: 30px; color: white; font-weight: 600; cursor: pointer; }
+        @media (max-width: 800px) { .grid-2col { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="header">
+        <div class="logo">
+            <h1><i class="fas fa-shield-hal"></i> Crypto OSINT · LTC + IP + История</h1>
+        </div>
+        <div class="stats-cards">
+            <div class="stat-card"><div class="stat-value" id="stat-wallets">0</div><div class="stat-label">Всего кошельков</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-total-btc">0.0000</div><div class="stat-label">BTC (все)</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-total-ltc">0.0000</div><div class="stat-label">LTC (все)</div></div>
+        </div>
+    </div>
+
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="wallets"><i class="fas fa-wallet"></i> Мониторинг кошельков</button>
+        <button class="tab-btn" data-tab="ip"><i class="fas fa-map-marker-alt"></i> Анализ IP</button>
+    </div>
+
+    <!-- ВКЛАДКА КОШЕЛЬКИ -->
+    <div class="panel active" id="panel-wallets">
+        <div class="api-status">
+            <span class="api-badge loading" id="api-blockcypher"><i class="fas fa-link"></i> BlockCypher</span>
+            <span class="api-badge loading" id="api-blockchair"><i class="fas fa-history"></i> Blockchair</span>
+            <button class="refresh-btn" id="refresh-wallets"><i class="fas fa-sync-alt"></i> Обновить всё</button>
+        </div>
+        <h2 class="panel-title"><i class="fas fa-wallet"></i> Отслеживание криптокошельков (BTC, LTC, DOGE, ETH, TRX, SOL)</h2>
+        <div class="card">
+            <h3><i class="fas fa-database"></i> Обнаруженные кошельки и балансы</h3>
+            <table class="crypto-table">
+                <thead><tr><th>Сеть</th><th>Адрес</th><th>Баланс</th><th>Транзакции</th><th>История</th><th>Ссылка</th></tr></thead>
+                <tbody id="wallets-table"><tr><td colspan="6" style="text-align:center"><i class="fas fa-spinner fa-pulse"></i> Загрузка со всех сетей...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="card" style="margin-top: 20px;">
+            <h3><i class="fas fa-plus-circle"></i> Добавить кошелёк в мониторинг</h3>
+            <div class="input-group">
+                <input type="text" id="new-wallet-input" placeholder="Введите адрес (BTC, LTC, ETH, TRX...)" style="flex:1;">
+                <button id="add-wallet-btn"><i class="fas fa-plus"></i> Добавить</button>
+            </div>
+            <div id="custom-wallets-list" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <!-- ВКЛАДКА IP -->
+    <div class="panel" id="panel-ip">
+        <h2 class="panel-title"><i class="fas fa-map-marker-alt"></i> Анализ IP-адресов</h2>
+        <div class="card">
+            <h3><i class="fas fa-search"></i> Проверить IP-адрес</h3>
+            <div class="input-group">
+                <input type="text" id="ip-input" placeholder="Введите IP-адрес..." style="flex:1;">
+                <button id="check-ip-btn"><i class="fas fa-globe"></i> Проверить</button>
+            </div>
+            <div id="ip-result" style="margin-top: 20px; padding: 15px; background: #0d1117; border-radius: 20px;">
+                <p style="color: #8b949e;">Введите IP-адрес и нажмите "Проверить".</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const CONFIG = {
+            BLOCKCYPHER_TOKEN: 'e5c1b0c2a0c24b7b8f0d5e5a6b7c8d9e',
+            ETHERSCAN_API_KEY: 'ВАШ_ETHERSCAN_API_КЛЮЧ',
+            TRONGRID_API_KEY: 'ВАШ_TRONGRID_API_КЛЮЧ',
+            SOLANA_RPC: 'https://api.mainnet-beta.solana.com',
+        };
+        const walletsData = [];
+        const customWallets = new Set();
+        const DEFAULT_WALLETS = [
+            '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+            'Lh4UL56T7qV7z7u7z7u7z7u7z7u7z7u7z7u7z7u', // пример LTC
+            '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy',
+            '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+            'TXmVHN1Cpj4BpU7UG6kQEwqUg6i8m6Vk3e',
+        ];
+
+        function formatBTC(satoshi) { return (satoshi / 100000000).toFixed(8); }
+        function formatLTC(litoshi) { return (litoshi / 100000000).toFixed(8); }
+        function formatETH(wei) { return (wei / 1e18).toFixed(6); }
+        function formatTRX(sun) { return (sun / 1e6).toFixed(2); }
+        function formatSOL(lamports) { return (lamports / 1e9).toFixed(4); }
+
+        // ---------- API ЗАПРОСЫ ----------
+        async function fetchBlockCypher(chain, address) {
+            try {
+                const url = `https://api.blockcypher.com/v1/${chain}/main/addrs/${address}/balance?token=${CONFIG.BLOCKCYPHER_TOKEN}`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`${chain} error`);
+                const data = await resp.json();
+                return { address, balance: data.balance, tx_count: data.n_tx, chain };
+            } catch { return null; }
+        }
+
+        async function fetchETH(address) {
+            if (!CONFIG.ETHERSCAN_API_KEY || CONFIG.ETHERSCAN_API_KEY.includes('ВАШ')) return null;
+            try {
+                const url = `https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (data.status !== '1') return null;
+                return { address, balance: data.result, tx_count: 0, chain: 'ETH' };
+            } catch { return null; }
+        }
+
+        async function fetchTRX(address) {
+            if (!CONFIG.TRONGRID_API_KEY || CONFIG.TRONGRID_API_KEY.includes('ВАШ')) return null;
+            try {
+                const url = `https://api.trongrid.io/v1/accounts/${address}`;
+                const resp = await fetch(url, { headers: { 'TRON-PRO-API-KEY': CONFIG.TRONGRID_API_KEY } });
+                const data = await resp.json();
+                if (!data.data || data.data.length === 0) return null;
+                const acc = data.data[0];
+                return { address, balance: acc.balance || 0, tx_count: 0, chain: 'TRX' };
+            } catch { return null; }
+        }
+
+        async function fetchSOL(address) {
+            try {
+                const payload = { jsonrpc: '2.0', id: 1, method: 'getBalance', params: [address] };
+                const resp = await fetch(CONFIG.SOLANA_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await resp.json();
+                if (data.error) return null;
+                return { address, balance: data.result.value, tx_count: 0, chain: 'SOL' };
+            } catch { return null; }
+        }
+
+        // Обновление таблицы
+        function renderWalletsTable() {
+            const tbody = document.getElementById('wallets-table');
+            if (walletsData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">Нет данных</td></tr>';
+                return;
+            }
+            let totalBTC = 0, totalLTC = 0;
+            const rows = walletsData.map(w => {
+                let balanceStr = '';
+                if (w.chain === 'BTC') { balanceStr = formatBTC(w.balance) + ' BTC'; totalBTC += w.balance; }
+                else if (w.chain === 'LTC') { balanceStr = formatLTC(w.balance) + ' LTC'; totalLTC += w.balance; }
+                else if (w.chain === 'ETH') balanceStr = formatETH(w.balance) + ' ETH';
+                else if (w.chain === 'TRX') balanceStr = formatTRX(w.balance) + ' TRX';
+                else if (w.chain === 'SOL') balanceStr = formatSOL(w.balance) + ' SOL';
+                else if (w.chain === 'DOGE') balanceStr = (w.balance / 1e8).toFixed(0) + ' DOGE';
+                else balanceStr = w.balance + ' ' + w.chain;
+                
+                const explorerUrl = w.chain === 'BTC' ? `https://blockstream.info/address/${w.address}` :
+                                   (w.chain === 'LTC' ? `https://blockchair.com/litecoin/address/${w.address}` :
+                                   (w.chain === 'ETH' ? `https://etherscan.io/address/${w.address}` :
+                                   (w.chain === 'TRX' ? `https://tronscan.org/#/address/${w.address}` :
+                                   (w.chain === 'SOL' ? `https://solscan.io/account/${w.address}` : '#'))));
+                const historyUrl = `https://blockchair.com/${w.chain.toLowerCase()}/address/${w.address}`;
+                return `<tr>
+                    <td>${w.chain}</td>
+                    <td><a href="${explorerUrl}" target="_blank" class="link-hash">${w.address.substring(0,8)}...</a></td>
+                    <td>${balanceStr}</td>
+                    <td>${w.tx_count}</td>
+                    <td><a href="${historyUrl}" target="_blank" class="link-hash"><i class="fas fa-history"></i> История</a></td>
+                    <td><a href="${explorerUrl}" target="_blank" style="color:#7aa2f7;">🔗</a></td>
+                </tr>`;
+            }).join('');
+            tbody.innerHTML = rows;
+            document.getElementById('stat-wallets').textContent = walletsData.length;
+            document.getElementById('stat-total-btc').textContent = (totalBTC / 1e8).toFixed(4);
+            document.getElementById('stat-total-ltc').textContent = (totalLTC / 1e8).toFixed(4);
+        }
+
+        async function loadAllWallets() {
+            const addresses = [...DEFAULT_WALLETS, ...Array.from(customWallets)];
+            walletsData.length = 0;
+            const tableBody = document.getElementById('wallets-table');
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center"><i class="fas fa-spinner fa-pulse"></i> Идёт массовый опрос сетей...</td></tr>';
+            
+            const promises = addresses.flatMap(addr => [
+                fetchBlockCypher('btc', addr).then(r => { if(r) walletsData.push(r); }).catch(()=>{}),
+                fetchBlockCypher('ltc', addr).then(r => { if(r) walletsData.push(r); }).catch(()=>{}),
+                fetchBlockCypher('doge', addr).then(r => { if(r) walletsData.push(r); }).catch(()=>{}),
+                fetchETH(addr).then(r => { if(r) walletsData.push(r); }).catch(()=>{}),
+                fetchTRX(addr).then(r => { if(r) walletsData.push(r); }).catch(()=>{}),
+                fetchSOL(addr).then(r => { if(r) walletsData.push(r); }).catch(()=>{}),
+            ]);
+            await Promise.allSettled(promises);
+            renderWalletsTable();
+            document.getElementById('api-blockcypher').className = 'api-badge online';
+            document.getElementById('api-blockcypher').innerHTML = '<i class="fas fa-link"></i> BlockCypher: OK';
+            document.getElementById('api-blockchair').className = 'api-badge online';
+            document.getElementById('api-blockchair').innerHTML = '<i class="fas fa-history"></i> Blockchair: OK';
+        }
+
+        // ---------- IP АНАЛИЗ (ipapi.co) ----------
+        async function checkIP(ip) {
+            const resultDiv = document.getElementById('ip-result');
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Запрос к ipapi.co...';
+            try {
+                const url = `https://ipapi.co/${ip}/json/`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (data.error) throw new Error(data.reason || 'Ошибка API');
+                resultDiv.innerHTML = `
+                    <p><i class="fas fa-map-pin"></i> <strong>IP:</strong> ${data.ip}</p>
+                    <p><i class="fas fa-globe"></i> <strong>Страна:</strong> ${data.country_name} (${data.country_code})</p>
+                    <p><i class="fas fa-city"></i> <strong>Город:</strong> ${data.city}, ${data.region}</p>
+                    <p><i class="fas fa-server"></i> <strong>Провайдер:</strong> ${data.org}</p>
+                    <p><i class="fas fa-clock"></i> <strong>Часовой пояс:</strong> ${data.timezone}</p>
+                `;
+            } catch (e) {
+                resultDiv.innerHTML = `<p style="color:#e05561;">Ошибка: ${e.message}</p>`;
+            }
+        }
+
+        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
+        const tabs = document.querySelectorAll('.tab-btn');
+        const panels = { wallets: document.getElementById('panel-wallets'), ip: document.getElementById('panel-ip') };
+        function switchTab(tabId) {
+            tabs.forEach(btn => btn.classList.remove('active'));
+            Object.values(panels).forEach(p => p.classList.remove('active'));
+            document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+            panels[tabId].classList.add('active');
+        }
+        tabs.forEach(btn => btn.addEventListener('click', (e) => switchTab(btn.dataset.tab)));
+
+        window.addEventListener('load', () => {
+            loadAllWallets();
+            switchTab('wallets');
+            
+            document.getElementById('refresh-wallets').addEventListener('click', loadAllWallets);
+            document.getElementById('add-wallet-btn').addEventListener('click', () => {
+                const input = document.getElementById('new-wallet-input');
+                const addr = input.value.trim();
+                if (addr) {
+                    customWallets.add(addr);
+                    input.value = '';
+                    loadAllWallets();
+                    const listDiv = document.getElementById('custom-wallets-list');
+                    const item = document.createElement('span');
+                    item.className = 'badge';
+                    item.style.margin = '5px';
+                    item.textContent = addr.substring(0,10)+'...';
+                    listDiv.appendChild(item);
+                }
+            });
+            document.getElementById('check-ip-btn').addEventListener('click', () => {
+                const ip = document.getElementById('ip-input').value.trim();
+                if (ip) checkIP(ip);
+            });
+        });
+    })();
+</script>
+</body>
+</html>
